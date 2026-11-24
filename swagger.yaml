@@ -13,7 +13,7 @@ info:
 
     **Datas:** sempre no formato `AAAA-MM-DD`.
 servers:
-  - url: https://wizsolucoes184873.protheus.cloudtotvs.com.br:11474/rest/api/compras/v1
+  - url: https://wizsolucoes184873.protheus.cloudtotvs.com.br:11474/rest/tlpp/compras/v1
     description: Integração Pedido de Compras
 security:
   - basicAuth: []
