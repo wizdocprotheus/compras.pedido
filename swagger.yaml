@@ -1,0 +1,383 @@
+openapi: 3.0.3
+info:
+  title: Pedido de Compras API (Protheus)
+  version: 1.0.0
+  description: |
+    API REST de Pedido de Compras escrita em TLPP.
+
+    Inclusão, alteração e exclusão são feitas pela rotina padrão **MATA120** (ExecAuto),
+    então valem as validações, alçadas de aprovação e pontos de entrada do Protheus.
+
+    **Autenticação:** Basic Auth com usuário e senha do Protheus.
+    O pedido é gravado em nome do usuário autenticado.
+
+    **Datas:** sempre no formato `AAAA-MM-DD`.
+servers:
+  - url: https://wizsolucoes184873.protheus.cloudtotvs.com.br:11474/rest/api/compras/v1/pedidos
+    description: Integração Pedido de Compras
+security:
+  - basicAuth: []
+tags:
+  - name: Pedidos
+    description: Pedido de compras (SC7)
+
+paths:
+  /pedidos:
+    get:
+      tags: [Pedidos]
+      summary: Lista pedidos de compra
+      description: Lista paginada, ordenada do número mais recente para o mais antigo. Um registro por pedido (itens somados).
+      operationId: listarPedidos
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: fornecedor
+          in: query
+          description: Código do fornecedor (C7_FORNECE)
+          schema: { type: string, example: "000001" }
+        - name: loja
+          in: query
+          description: Loja do fornecedor (C7_LOJA)
+          schema: { type: string, example: "01" }
+        - name: emissaoDe
+          in: query
+          description: Emissão inicial
+          schema: { type: string, format: date, example: "2026-11-01" }
+        - name: emissaoAte
+          in: query
+          description: Emissão final
+          schema: { type: string, format: date, example: "2026-11-30" }
+      responses:
+        "200":
+          description: Página de pedidos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListaPedidos" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+    post:
+      tags: [Pedidos]
+      summary: Inclui um pedido de compra
+      description: |
+        Executa a MATA120 com opção 3 (inclusão).
+
+        - `numero` não é necessário informar, o sistema usa a numeração padrão (GetSXENum).
+        - `centroCusto` e `tes` são obrigatórios em cada item. 
+        - O centro de custo é conferido na CTT (existe, não bloqueado, analítico) e a TES na SF4 (existe, não bloqueada).
+      operationId: incluirPedido
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PedidoInclusao" }
+            example:
+              fornecedor: "000001"
+              loja: "01"
+              condicaoPagamento: "001"
+              emissao: "2026-11-23"
+              contato: "Joao"
+              itens:
+                - produto: "PROD001"
+                  quantidade: 10
+                  preco: 25.50
+                  tes: "101"
+                  centroCusto: "1001"
+                  dataEntrega: "2026-12-05"
+                  armazem: "01"
+                  observacao: "Teste via API"
+                - produto: "PROD002"
+                  quantidade: 2
+                  preco: 199.90
+                  tes: "101"
+                  centroCusto: "1001"
+      responses:
+        "201":
+          description: Pedido incluído; retorna o pedido completo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pedido" }
+        "400": { $ref: "#/components/responses/DadosInvalidos" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "409":
+          description: Já existe pedido com o `numero` informado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erro" }
+        "422": { $ref: "#/components/responses/RecusadoMata120" }
+
+  /pedidos/{numero}:
+    parameters:
+      - name: numero
+        in: path
+        required: true
+        description: Número do pedido (C7_NUM)
+        schema: { type: string, example: "000123" }
+
+    get:
+      tags: [Pedidos]
+      summary: Consulta um pedido com seus itens
+      operationId: consultarPedido
+      responses:
+        "200":
+          description: Pedido encontrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pedido" }
+        "400": { $ref: "#/components/responses/DadosInvalidos" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+    put:
+      tags: [Pedidos]
+      summary: Altera um pedido de compra
+      description: |
+        Executa a MATA120 com opção 4 (alteração). Envie só o que muda.
+
+        - Campos de cabeçalho omitidos mantêm o valor atual.
+        - Sem `itens`, só o cabeçalho é alterado.
+        - Em `itens`, o campo `item` é obrigatório em cada linha:
+          - item existente: alterado;
+          - item existente com `excluir: true`: removido;
+          - número de item que ainda não existe: incluído (exige produto, quantidade, preço, `centroCusto` e `tes`).
+      operationId: alterarPedido
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PedidoAlteracao" }
+            example:
+              condicaoPagamento: "002"
+              itens:
+                - item: "0001"
+                  quantidade: 12
+                - item: "0002"
+                  excluir: true
+                - item: "0003"
+                  produto: "PROD003"
+                  quantidade: 5
+                  preco: 10
+                  tes: "101"
+                  centroCusto: "1001"
+      responses:
+        "200":
+          description: Pedido alterado; retorna o pedido completo
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pedido" }
+        "400": { $ref: "#/components/responses/DadosInvalidos" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "422": { $ref: "#/components/responses/RecusadoMata120" }
+
+    delete:
+      tags: [Pedidos]
+      summary: Exclui um pedido de compra
+      description: Executa a MATA120 com opção 5 (exclusão). Pedido com algum item já recebido (C7_QUJE > 0) não pode ser excluído.
+      operationId: excluirPedido
+      responses:
+        "204":
+          description: Pedido excluído (sem corpo)
+        "400": { $ref: "#/components/responses/DadosInvalidos" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "409":
+          description: Pedido possui itens já recebidos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erro" }
+        "422": { $ref: "#/components/responses/RecusadoMata120" }
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: Usuário e senha do Protheus
+
+  responses:
+    DadosInvalidos:
+      description: JSON inválido, campo obrigatório faltando, centro de custo ou TES inválidos
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Erro" }
+          example:
+            code: 400
+            message: "Dados invalidos."
+            details:
+              - "Item 0001: 'centroCusto' e obrigatorio na inclusao."
+              - "Item 0002: TES '501' e de saida; informe uma TES de entrada (menor que 500)."
+    NaoAutenticado:
+      description: Usuário/senha ausentes ou inválidos
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Erro" }
+          example:
+            code: 401
+            message: "Usuario nao autenticado. Envie usuario e senha do Protheus (Basic Auth)."
+            details: []
+    NaoEncontrado:
+      description: Pedido não encontrado
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Erro" }
+          example:
+            code: 404
+            message: "Pedido 000123 nao encontrado."
+            details: []
+    RecusadoMata120:
+      description: A rotina MATA120 recusou a operação; o log do Protheus vem em `details`
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Erro" }
+          example:
+            code: 422
+            message: "Pedido nao incluido."
+            details: ["<log retornado pela MATA120>"]
+
+  schemas:
+    Erro:
+      type: object
+      properties:
+        code: { type: integer, example: 400 }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: string }
+
+    ItemInclusao:
+      type: object
+      required: [produto, quantidade, preco, tes, centroCusto]
+      properties:
+        item:
+          type: string
+          description: Número do item (C7_ITEM). Se omitido, é sequencial (0001, 0002...).
+          example: "0001"
+        produto: { type: string, description: C7_PRODUTO, example: "PROD001" }
+        quantidade: { type: number, description: C7_QUANT, minimum: 0, exclusiveMinimum: true, example: 10 }
+        preco: { type: number, description: C7_PRECO, minimum: 0, exclusiveMinimum: true, example: 25.5 }
+        tes:
+          type: string
+          description: TES de entrada (C7_TES). Obrigatória.
+          example: "101"
+        centroCusto:
+          type: string
+          description: Centro de custo analítico (C7_CC). Obrigatório.
+          example: "1001"
+        dataEntrega: { type: string, format: date, description: informar a data de inclusão do pedido. }
+        armazem: { type: string, description: C7_LOCAL, sempre enviar conformoe o example: "01" }
+        observacao: { type: string, description: C7_OBS, nesse campo geralmente é informado o numero da nota, exemple: NF 000000 }
+
+    PedidoInclusao:
+      type: object
+      required: [fornecedor, loja, condicaoPagamento, itens]
+      properties:
+        numero: { type: string, description: "C7_NUM. Opcional; sem ele usa a numeração padrão." }
+        fornecedor: { type: string, description: C7_FORNECE, example: "000001" }
+        loja: { type: string, description: C7_LOJA, example: "01" }
+        condicaoPagamento: { type: string, description: C7_COND, example: "001" }
+        emissao: { type: string, format: date, description: "C7_EMISSAO. Padrão: data base." }
+        contato: { type: string, description: C7_CONTATO - Enviar vazio }
+        filialEntrega: { type: string, description: "C7_FILENT. Padrão: filial corrente, não precisa enviar." }
+        centroCusto: { type: string, description: Centro de custo.}
+        tes: { type: string, description: TES - Tipo de entrada e saída}
+        itens:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/ItemInclusao" }
+
+    ItemAlteracao:
+      type: object
+      required: [item]
+      properties:
+        item: { type: string, description: Número do item (C7_ITEM), example: "0001" }
+        excluir: { type: boolean, description: true remove o item do pedido }
+        produto: { type: string }
+        quantidade: { type: number }
+        preco: { type: number }
+        tes: { type: string }
+        centroCusto: { type: string }
+        dataEntrega: { type: string, format: date }
+        armazem: { type: string }
+        observacao: { type: string }
+
+    PedidoAlteracao:
+      type: object
+      properties:
+        fornecedor: { type: string }
+        loja: { type: string }
+        condicaoPagamento: { type: string }
+        emissao: { type: string, format: date }
+        contato: { type: string }
+        filialEntrega: { type: string }
+        centroCusto: { type: string, description: Padrão para itens novos }
+        tes: { type: string, description: Padrão para itens novos }
+        itens:
+          type: array
+          items: { $ref: "#/components/schemas/ItemAlteracao" }
+
+    Item:
+      type: object
+      properties:
+        item: { type: string, example: "0001" }
+        produto: { type: string }
+        descricao: { type: string }
+        unidade: { type: string }
+        quantidade: { type: number }
+        quantidadeEntregue: { type: number, description: C7_QUJE }
+        preco: { type: number }
+        total: { type: number }
+        dataEntrega: { type: string, format: date }
+        armazem: { type: string }
+        centroCusto: { type: string }
+        tes: { type: string }
+        observacao: { type: string }
+        situacao:
+          type: string
+          enum: [aberto, parcial, atendido, residuo_eliminado]
+
+    Pedido:
+      type: object
+      properties:
+        filial: { type: string }
+        numero: { type: string, example: "000123" }
+        emissao: { type: string, format: date }
+        fornecedor: { type: string }
+        loja: { type: string }
+        nomeFornecedor: { type: string, description: A2_NOME }
+        condicaoPagamento: { type: string }
+        contato: { type: string }
+        filialEntrega: { type: string }
+        aprovacao:
+          type: string
+          enum: [liberado, bloqueado, rejeitado]
+          description: Situação na alçada de aprovação (C7_CONAPRO)
+        valorTotal: { type: number }
+        itens:
+          type: array
+          items: { $ref: "#/components/schemas/Item" }
+
+    ResumoPedido:
+      type: object
+      properties:
+        numero: { type: string }
+        fornecedor: { type: string }
+        loja: { type: string }
+        emissao: { type: string, format: date }
+        condicaoPagamento: { type: string }
+        aprovacao: { type: string, enum: [liberado, bloqueado, rejeitado] }
+        quantidadeItens: { type: integer }
+        valorTotal: { type: number }
+
+    ListaPedidos:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ResumoPedido" }
+        page: { type: integer }
+        pageSize: { type: integer }
+        hasNext: { type: boolean, description: Indica se existe próxima página }
