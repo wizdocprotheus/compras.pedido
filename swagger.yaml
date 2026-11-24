@@ -13,13 +13,15 @@ info:
 
     **Datas:** sempre no formato `AAAA-MM-DD`.
 servers:
-  - url: https://wizsolucoes184873.protheus.cloudtotvs.com.br:11474/rest/api/compras/v1/pedidos
+  - url: https://wizsolucoes184873.protheus.cloudtotvs.com.br:11474/rest/api/compras/v1
     description: Integração Pedido de Compras
 security:
   - basicAuth: []
 tags:
   - name: Pedidos
     description: Pedido de compras (SC7)
+  - name: Condições de pagamento
+    description: Consulta das condições de pagamento (SE4)
 
 paths:
   /pedidos:
@@ -66,7 +68,7 @@ paths:
         Executa a MATA120 com opção 3 (inclusão).
 
         - `numero` não é necessário informar, o sistema usa a numeração padrão (GetSXENum).
-        - `centroCusto` e `tes` são obrigatórios em cada item. 
+        - `centroCusto` e `tes` são obrigatórios em cada item.
         - O centro de custo é conferido na CTT (existe, não bloqueado, analítico) e a TES na SF4 (existe, não bloqueada).
       operationId: incluirPedido
       requestBody:
@@ -191,6 +193,24 @@ paths:
               schema: { $ref: "#/components/schemas/Erro" }
         "422": { $ref: "#/components/responses/RecusadoMata120" }
 
+  /condicoes-pagamento:
+    get:
+      tags: [Condições de pagamento]
+      summary: Lista as condições de pagamento
+      description: Retorna código e descrição de todas as condições de pagamento (SE4) não excluídas da filial, ordenadas pelo código.
+      operationId: listarCondicoesPagamento
+      responses:
+        "200":
+          description: Condições de pagamento
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListaCondicoesPagamento" }
+              example:
+                items:
+                  - { codigo: "001", descricao: "A VISTA" }
+                  - { codigo: "002", descricao: "30 DIAS" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
 components:
   securitySchemes:
     basicAuth:
@@ -267,9 +287,9 @@ components:
           type: string
           description: Centro de custo analítico (C7_CC). Obrigatório.
           example: "1001"
-        dataEntrega: { type: string, format: date, description: informar a data de inclusão do pedido. }
-        armazem: { type: string, description: C7_LOCAL, sempre enviar conformoe o example: "01" }
-        observacao: { type: string, description: C7_OBS, nesse campo geralmente é informado o numero da nota, exemple: NF 000000 }
+        dataEntrega: { type: string, format: date, description: "Informar a data de inclusão do pedido." }
+        armazem: { type: string, description: "C7_LOCAL. Sempre enviar conforme o exemplo.", example: "01" }
+        observacao: { type: string, description: "C7_OBS. Nesse campo geralmente é informado o número da nota.", example: "NF 000000" }
 
     PedidoInclusao:
       type: object
@@ -280,10 +300,10 @@ components:
         loja: { type: string, description: C7_LOJA, example: "01" }
         condicaoPagamento: { type: string, description: C7_COND, example: "001" }
         emissao: { type: string, format: date, description: "C7_EMISSAO. Padrão: data base." }
-        contato: { type: string, description: C7_CONTATO - Enviar vazio }
+        contato: { type: string, description: "C7_CONTATO. Enviar vazio." }
         filialEntrega: { type: string, description: "C7_FILENT. Padrão: filial corrente, não precisa enviar." }
-        centroCusto: { type: string, description: Centro de custo.}
-        tes: { type: string, description: TES - Tipo de entrada e saída}
+        centroCusto: { type: string, description: "Centro de custo." }
+        tes: { type: string, description: "TES - Tipo de entrada e saída." }
         itens:
           type: array
           minItems: 1
@@ -381,3 +401,16 @@ components:
         page: { type: integer }
         pageSize: { type: integer }
         hasNext: { type: boolean, description: Indica se existe próxima página }
+
+    CondicaoPagamento:
+      type: object
+      properties:
+        codigo: { type: string, description: E4_CODIGO, example: "001" }
+        descricao: { type: string, description: E4_DESCRI, example: "A VISTA" }
+
+    ListaCondicoesPagamento:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CondicaoPagamento" }
