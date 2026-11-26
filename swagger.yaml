@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Pedido de Compras API (Protheus)
-  version: 1.0.0
+  version: 1.0.1
   description: |
     API REST de Pedido de Compras escrita em TLPP.
 
@@ -13,7 +13,7 @@ info:
 
     **Datas:** sempre no formato `AAAA-MM-DD`.
 servers:
-  - url: https://wizsolucoes184873.protheus.cloudtotvs.com.br:11474/rest/tlpp/compras/v1
+  - url: https://wizsolucoes184873.protheus.cloudtotvs.com.br:11474/rest/api/compras/v1
     description: Integração Pedido de Compras
 security:
   - basicAuth: []
@@ -22,6 +22,8 @@ tags:
     description: Pedido de compras (SC7)
   - name: Condições de pagamento
     description: Consulta das condições de pagamento (SE4)
+  - name: Produtos
+    description: Consulta de produtos (SB1)
 
 paths:
   /pedidos:
@@ -209,6 +211,24 @@ paths:
                 items:
                   - { codigo: "001", descricao: "A VISTA" }
                   - { codigo: "002", descricao: "30 DIAS" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /produtos:
+    get:
+      tags: [Produtos]
+      summary: Lista os produtos
+      description: Retorna código, descrição e conta contábil dos produtos (SB1) não excluídos da filial com B1_XENVWP = '1', ordenados pelo código.
+      operationId: listarProdutos
+      responses:
+        "200":
+          description: Produtos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListaProdutos" }
+              example:
+                items:
+                  - { codigo: "PROD001", descricao: "PARAFUSO 10MM", conta: "1101010001" }
+                  - { codigo: "PROD002", descricao: "PORCA 10MM", conta: "1101010001" }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
 
 components:
@@ -414,3 +434,17 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/CondicaoPagamento" }
+
+    Produto:
+      type: object
+      properties:
+        codigo: { type: string, description: B1_COD, example: "PROD001" }
+        descricao: { type: string, description: B1_DESC, example: "PARAFUSO 10MM" }
+        conta: { type: string, description: B1_CONTA (conta contábil), example: "1101010001" }
+
+    ListaProdutos:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Produto" }
